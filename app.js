@@ -51,7 +51,17 @@ const DIFFICULTY_LEVELS = {
 };
 let currentDifficulty = 3; // default to Medium
 
-let game = new Chess();
+const SIX_BY_SIX_START_FEN = "rnqknr/pppppp/6/6/PPPPPP/RNQKNR w - - 0 1"; // Los Alamos style
+const ALLOWED_SQUARES_6X6 = new Set([
+  "a1","b1","c1","d1","e1","f1",
+  "a2","b2","c2","d2","e2","f2",
+  "a3","b3","c3","d3","e3","f3",
+  "a4","b4","c4","d4","e4","f4",
+  "a5","b5","c5","d5","e5","f5",
+  "a6","b6","c6","d6","e6","f6",
+]);
+
+let game = new Chess(SIX_BY_SIX_START_FEN);
 let board = null;
 let engine = null;
 let pendingEngineMove = false;
@@ -78,52 +88,70 @@ function getAudioCtx() {
   return audioCtx;
 }
 
+function playWoodClick(ctx, t0, bodyFreq = 180, volume = 0.12) {
+  const body = ctx.createOscillator();
+  const bodyGain = ctx.createGain();
+  body.type = 'triangle';
+  body.frequency.setValueAtTime(bodyFreq, t0);
+  body.frequency.exponentialRampToValueAtTime(bodyFreq * 0.6, t0 + 0.05);
+  bodyGain.gain.setValueAtTime(volume, t0);
+  bodyGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.06);
+  body.connect(bodyGain).connect(ctx.destination);
+  body.start(t0);
+  body.stop(t0 + 0.07);
+
+  const buffer = ctx.createBuffer(1, ctx.sampleRate * 0.03, ctx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < data.length; i++) {
+    data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (data.length * 0.22));
+  }
+  const noise = ctx.createBufferSource();
+  noise.buffer = buffer;
+  const bp = ctx.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.frequency.value = 1500;
+  bp.Q.value = 1.2;
+  const noiseGain = ctx.createGain();
+  noiseGain.gain.setValueAtTime(volume * 0.6, t0);
+  noiseGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.03);
+  noise.connect(bp).connect(noiseGain).connect(ctx.destination);
+  noise.start(t0);
+  noise.stop(t0 + 0.03);
+}
+
 function playSound(type) {
   try {
     const ctx = getAudioCtx();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
+    const t = ctx.currentTime;
 
     switch (type) {
       case 'move':
-        osc.frequency.value = 600;
-        gain.gain.value = 0.08;
-        osc.type = 'sine';
-        osc.start();
-        osc.stop(ctx.currentTime + 0.06);
+        playWoodClick(ctx, t, 190, 0.10);
         break;
       case 'capture':
-        osc.frequency.value = 300;
-        gain.gain.value = 0.12;
-        osc.type = 'triangle';
-        osc.start();
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
-        osc.stop(ctx.currentTime + 0.15);
+        playWoodClick(ctx, t, 150, 0.13);
+        playWoodClick(ctx, t + 0.03, 120, 0.09);
         break;
-      case 'check':
-        osc.frequency.value = 800;
-        gain.gain.value = 0.1;
-        osc.type = 'square';
-        osc.start();
-        osc.frequency.exponentialRampToValueAtTime(400, ctx.currentTime + 0.15);
-        osc.stop(ctx.currentTime + 0.15);
+      case 'check': {
+        playWoodClick(ctx, t, 210, 0.10);
+        const bell = ctx.createOscillator();
+        const g = ctx.createGain();
+        bell.type = 'sine';
+        bell.frequency.value = 880;
+        g.gain.setValueAtTime(0.05, t);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
+        bell.connect(g).connect(ctx.destination);
+        bell.start(t);
+        bell.stop(t + 0.2);
         break;
+      }
       case 'gameover':
-        osc.frequency.value = 440;
-        gain.gain.value = 0.1;
-        osc.type = 'sine';
-        osc.start();
-        osc.frequency.setValueAtTime(440, ctx.currentTime);
-        osc.frequency.setValueAtTime(330, ctx.currentTime + 0.15);
-        osc.frequency.setValueAtTime(220, ctx.currentTime + 0.3);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
-        osc.stop(ctx.currentTime + 0.5);
+        playWoodClick(ctx, t, 170, 0.11);
+        playWoodClick(ctx, t + 0.12, 145, 0.09);
         break;
     }
   } catch (e) {
-    // Audio not available, no big deal
+    // Audio not available
   }
 }
 
@@ -140,14 +168,16 @@ function initEngine() {
   if (engine) engine.terminate?.();
   // Try WASM first, fall back to old JS engine
   try {
-    engine = new Worker("stockfish-18-lite-single.js");
+    engine = new Worker("fairy-stockfish.js");
   } catch (e) {
-    console.warn("WASM engine failed, falling back to stockfish.js", e);
-    engine = new Worker("stockfish.js");
+    console.warn("Fairy worker failed, falling back to Stockfish WASM", e);
+    engine = new Worker("stockfish-18-lite-single.js");
   }
   engine.onmessage = handleEngineMessage;
   engineReady = false;
   engine.postMessage("uci");
+  // Prefer Fairy-Stockfish Los Alamos 6x6 variant when supported
+  engine.postMessage("setoption name UCI_Variant value losalamos");
   applyDifficultySettings();
   engine.postMessage("isready");
 }
@@ -239,6 +269,7 @@ function applyEngineMove(bestMove) {
   const from = bestMove.slice(0, 2);
   const to = bestMove.slice(2, 4);
   const promotion = bestMove.slice(4, 5);
+  if (!ALLOWED_SQUARES_6X6.has(from) || !ALLOWED_SQUARES_6X6.has(to)) return;
   const move = { from, to };
   if (promotion) move.promotion = promotion;
 
@@ -301,6 +332,7 @@ function isEngineTurn() {
 /* ===== Drag & Drop ===== */
 function handleDragStart(source, piece) {
   if (removeModeEl.value !== "off") return false;
+  if (!ALLOWED_SQUARES_6X6.has(source)) return false;
   if (gameModeEl.value === "pve") {
     const playerColor = playerColorEl.value === "white" ? "w" : "b";
     if (piece[0] !== playerColor) return false;
@@ -312,6 +344,7 @@ function handleDragStart(source, piece) {
 
 function handleDrop(source, target) {
   if (removeModeEl.value !== "off") return "snapback";
+  if (!ALLOWED_SQUARES_6X6.has(source) || !ALLOWED_SQUARES_6X6.has(target)) return "snapback";
 
   const move = game.move({ from: source, to: target, promotion: "q" });
   if (!move) return "snapback";
@@ -347,10 +380,19 @@ function handleSnapEnd() {
 function syncBoard() {
   board.position(game.fen());
   applyRemovedShading();
+  applyBoardMask6x6();
+}
+
+function applyBoardMask6x6() {
+  boardEl.querySelectorAll('.square-55d63').forEach((el) => {
+    const sq = el.dataset.square;
+    if (!sq) return;
+    el.classList.toggle('square-outside-variant', !ALLOWED_SQUARES_6X6.has(sq));
+  });
 }
 
 function resetGame() {
-  game.reset();
+  game = new Chess(SIX_BY_SIX_START_FEN);
   ACTION_STACK.length = 0;
   REMOVED_PIECES.clear();
   clearRemovedShading();
@@ -741,7 +783,7 @@ function finishHandicapSetup() {
 /* ===== Init Board ===== */
 function initBoard() {
   board = Chessboard("board", {
-    position: "start",
+    position: SIX_BY_SIX_START_FEN,
     draggable: true,
     orientation: "white",
     pieceTheme: "https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png",
@@ -759,9 +801,13 @@ function initBoard() {
     },
   });
   boardEl.addEventListener("click", onBoardClick);
+  applyBoardMask6x6();
 
   // Handle window resize for responsive board
-  window.addEventListener("resize", () => board.resize());
+  window.addEventListener("resize", () => {
+    board.resize();
+    setTimeout(applyBoardMask6x6, 0);
+  });
 }
 
 /* ===== Boot ===== */
