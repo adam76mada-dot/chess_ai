@@ -897,6 +897,7 @@ function applyMoveFallbackLocal(move) {
 function requestEngineMove() {
   if (gameModeEl.value === "pvp") return;
   if (!currentFen) return;
+  pendingEngineMove = false;
 
   // Engine unavailable: fallback to local pseudo-AI.
   if (!engine || !engineReady) {
@@ -1152,6 +1153,9 @@ function attemptMove(from, to) {
   clearHighlights();
   if (gameModeEl.value === "pve") {
     pendingEngineMove = true;
+    setTimeout(() => {
+      if (pendingEngineMove) requestEngineMove();
+    }, 260);
   }
   if (gameModeEl.value === "pvp") {
     sendPvpMove(`${from}${to}`);
