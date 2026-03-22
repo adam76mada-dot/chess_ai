@@ -606,19 +606,29 @@ function renderBoardFromFen() {
 
 function pieceImageUrl(piece) {
   const code = `${piece.color}${piece.type.toUpperCase()}`;
-  return `/assets/pieces/${code}.png`;
+  return `./assets/pieces/${code}.png`;
 }
 
 
 async function ensureStockfishScript() {
   if (engineScriptLoaded) return;
-  await new Promise((resolve, reject) => {
-    const script = document.createElement("script");
-    script.src = "./fairy-stockfish.js";
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error("Failed to load engine"));
-    document.head.appendChild(script);
-  });
+
+  const loadScript = (src) =>
+    new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = src;
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error(`Failed to load ${src}`));
+      document.head.appendChild(script);
+    });
+
+  try {
+    await loadScript("./fairy-stockfish.js");
+  } catch (error) {
+    console.warn("Fairy engine script failed, falling back to stockfish.js", error);
+    await loadScript("./stockfish.js");
+  }
+
   engineScriptLoaded = true;
 }
 
@@ -637,7 +647,7 @@ async function initEngine() {
 async function loadVariantFileFor(target) {
   if (!target?.FS) return;
   try {
-    const response = await fetch("/variants.ini");
+    const response = await fetch("./variants.ini");
     if (!response.ok) return;
     const text = await response.text();
     const data = new TextEncoder().encode(text);
