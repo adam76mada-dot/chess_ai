@@ -489,15 +489,15 @@ function updatePlayerPanels() {
 }
 
 function setDepth(value) {
-  searchDepth = Math.min(Math.max(value, 6), 30);
+  searchDepth = Math.min(Math.max(value, 6), 40);
   depthRangeEl.value = String(searchDepth);
   depthValueEl.value = String(searchDepth);
   localStorage.setItem(STORAGE_KEYS.depth, String(searchDepth));
 }
 
 function loadDepth() {
-  const stored = Number.parseInt(localStorage.getItem(STORAGE_KEYS.depth) || "20", 10);
-  return Math.min(Math.max(Number.isFinite(stored) ? stored : 20, 6), 30);
+  const stored = Number.parseInt(localStorage.getItem(STORAGE_KEYS.depth) || "24", 10);
+  return Math.min(Math.max(Number.isFinite(stored) ? stored : 24, 6), 40);
 }
 
 function setVariant(id) {
@@ -917,7 +917,7 @@ function requestEngineMove() {
     if (!engineBusy) return;
     engineBusy = false;
     requestFallbackAIMove();
-  }, 900);
+  }, 2500);
 }
 
 function requestFallbackAIMove() {
@@ -1089,6 +1089,14 @@ function attemptMove(from, to) {
   if (timeModeEnabled) {
     cancelBestMoveHints();
   }
+
+  const targetPiece = boardMap.get(to);
+  if (targetPiece?.type === 'k') {
+    statusEl.textContent = "Illegal move: kings cannot be captured.";
+    selectedSquare = null;
+    clearHighlights();
+    return;
+  }
   if (gameModeEl.value === "pvp" && !isMyTurn()) {
     statusEl.textContent = "Not your turn.";
     selectedSquare = null;
@@ -1221,7 +1229,7 @@ function getPseudoLegalMovesForSide(side) {
         moves.push(`${from}${coordsToSquare(tf, tr)}`);
         return slider;
       }
-      if (target.color !== side) {
+      if (target.color !== side && target.type !== 'k') {
         moves.push(`${from}${coordsToSquare(tf, tr)}`);
       }
       return false;
@@ -1233,7 +1241,7 @@ function getPseudoLegalMovesForSide(side) {
       [[f - 1, r + dir], [f + 1, r + dir]].forEach(([cf, cr]) => {
         if (!inBounds(cf, cr)) return;
         const t = pieceAt(cf, cr);
-        if (t && t.color !== side) moves.push(`${from}${coordsToSquare(cf, cr)}`);
+        if (t && t.color !== side && t.type !== 'k') moves.push(`${from}${coordsToSquare(cf, cr)}`);
       });
       return;
     }
