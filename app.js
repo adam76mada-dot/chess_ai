@@ -114,6 +114,18 @@ const VARIANTS = [
   { id: "chess", label: "8x8", files: 8, ranks: 8 },
 ];
 
+const START_FEN_BY_VARIANT = {
+  losalamos: "rnqknr/pppppp/6/6/PPPPPP/RNQKNR w - - 0 1",
+  "5x6chess": "rnqkr/ppppp/5/5/PPPPP/RNQKR w - - 0 1",
+  "4x6chess": "rknr/pppp/4/4/PPPP/RKNR w - - 0 1",
+  "4x5chess": "rknr/pppp/4/PPPP/RKNR w - - 0 1",
+  chess: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+};
+
+function getStartFen(variantId) {
+  return START_FEN_BY_VARIANT[variantId] || START_FEN_BY_VARIANT.losalamos;
+}
+
 const PIECE_ARROW_COLORS = {
   w: {
     p: "rgba(96, 165, 250, 0.25)",
@@ -489,10 +501,10 @@ function setVariant(id) {
   const variant = VARIANTS.find((item) => item.id === id) || VARIANTS[0];
   currentVariant = variant;
   localStorage.setItem(STORAGE_KEYS.variant, variant.id);
-  buildBoard();
   selectedSquare = null;
   legalMoves = [];
-  currentFen = null;
+  currentFen = getStartFen(variant.id);
+  buildBoard();
   if (engineReady) {
     engine.postMessage("setoption name VariantPath value /variants.ini");
     engine.postMessage(`setoption name UCI_Variant value ${variant.id}`);
@@ -1688,6 +1700,8 @@ function resetGame(showModal = true) {
   totalTimeRemaining = { w: totalTimeSeconds, b: totalTimeSeconds };
   updateTotalTimerBar();
   cancelBestMoveHints();
+  currentFen = getStartFen(currentVariant.id);
+  renderBoardFromFen();
   if (engineReady) {
     engine.postMessage("ucinewgame");
     engine.postMessage("position startpos");
@@ -2112,7 +2126,10 @@ function init() {
     showUserModal();
   }
   loadVariant();
-  void initEngine();
+  void initEngine().catch((error) => {
+    console.error(error);
+    statusEl.textContent = "Engine failed to load. You can still view/start board.";
+  });
   window.addEventListener("resize", updateBoardSize);
   toggleSettingsEl.addEventListener("click", () => settingsContentEl.classList.toggle("hidden"));
   toggleSettingsEl.addEventListener("click", cleanupDragState);
