@@ -507,6 +507,7 @@ function setVariant(id) {
   selectedSquare = null;
   legalMoves = [];
   currentFen = getStartFen(variant.id);
+  window.__debugFen = currentFen;
   buildBoard();
   if (engineReady) {
     engine.postMessage("setoption name VariantPath value /variants.ini");
@@ -888,6 +889,7 @@ function applyMoveFallbackLocal(move) {
   const half = Number.parseInt(parts[4] || '0', 10) + 1;
   const full = Number.parseInt(parts[5] || '1', 10) + (nextSide === 'w' ? 1 : 0);
   currentFen = `${currentFen.split(' ')[0]} ${nextSide} ${castle} ${ep} ${half} ${full}`;
+  window.__debugFen = currentFen;
 
   renderBoardFromFen();
   statusEl.textContent = 'Move applied (local fallback).';
@@ -2152,7 +2154,9 @@ function undoMove() {
 
 function updateFenAtSquare(fen, square, pieceChar) {
   if (!fen) return fen;
-  const [placement, rest] = fen.split(" ");
+  const parts = fen.split(" ");
+  const placement = parts[0];
+  const rest = parts.slice(1).join(" ");
   const board = fenToBoard(placement);
   const file = square.charCodeAt(0) - 97;
   const rank = Number.parseInt(square[1], 10);
@@ -2160,7 +2164,7 @@ function updateFenAtSquare(fen, square, pieceChar) {
   if (!board[rowIndex]) return fen;
   board[rowIndex][file] = pieceChar;
   const nextPlacement = boardToFen(board);
-  return `${nextPlacement} ${rest}`;
+  return rest ? `${nextPlacement} ${rest}` : nextPlacement;
 }
 
 function fenToBoard(placement) {
