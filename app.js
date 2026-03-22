@@ -629,7 +629,6 @@ function pieceImageUrl(piece) {
 
 async function ensureStockfishScript() {
   if (engineScriptLoaded) return;
-
   const loadScript = (src) =>
     new Promise((resolve, reject) => {
       const script = document.createElement("script");
@@ -638,7 +637,6 @@ async function ensureStockfishScript() {
       script.onerror = () => reject(new Error(`Failed to load ${src}`));
       document.head.appendChild(script);
     });
-
   await loadScript("./fairy-stockfish.js");
   engineScriptLoaded = true;
 }
