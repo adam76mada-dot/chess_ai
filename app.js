@@ -2266,6 +2266,15 @@ function getSquareFromPoint(x, y) {
   return squareEl ? squareEl.dataset.square : null;
 }
 
+function syncSelfPlayTick() {
+  const enabled = !!selfPlayModeEl?.checked;
+  selfPlayEnabled = enabled;
+  if (!enabled) return;
+  if (gameModeEl.value !== 'pve') return;
+  if (engineBusy) return;
+  requestEngineMove();
+}
+
 function init() {
   setDepth(loadDepth());
   if (timeSecondsEl) {
@@ -2590,6 +2599,10 @@ function init() {
     updatePlayerPanels();
   }
   updateTimerBar();
+
+  // Keep self-play robust even if UI events are missed.
+  setInterval(syncSelfPlayTick, 600);
+
   fullscreenToggleEl.addEventListener("click", async () => {
     if (!document.fullscreenElement) {
       await document.documentElement.requestFullscreen();
