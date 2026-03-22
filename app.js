@@ -489,15 +489,15 @@ function updatePlayerPanels() {
 }
 
 function setDepth(value) {
-  searchDepth = Math.min(Math.max(value, 6), 40);
+  searchDepth = Math.min(Math.max(value, 6), 30);
   depthRangeEl.value = String(searchDepth);
   depthValueEl.value = String(searchDepth);
   localStorage.setItem(STORAGE_KEYS.depth, String(searchDepth));
 }
 
 function loadDepth() {
-  const stored = Number.parseInt(localStorage.getItem(STORAGE_KEYS.depth) || "24", 10);
-  return Math.min(Math.max(Number.isFinite(stored) ? stored : 24, 6), 40);
+  const stored = Number.parseInt(localStorage.getItem(STORAGE_KEYS.depth) || "20", 10);
+  return Math.min(Math.max(Number.isFinite(stored) ? stored : 20, 6), 30);
 }
 
 function setVariant(id) {
@@ -712,6 +712,13 @@ function handleEngineMessage(message) {
     if (line.startsWith("uciok")) {
       engine.postMessage("setoption name VariantPath value /variants.ini");
       engine.postMessage(`setoption name UCI_Variant value ${currentVariant.id}`);
+      // Max strength profile (depth slider still controls search depth)
+      engine.postMessage("setoption name UCI_LimitStrength value false");
+      engine.postMessage("setoption name Skill Level value 20");
+      engine.postMessage("setoption name MultiPV value 1");
+      const threads = Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 2) - 1));
+      engine.postMessage(`setoption name Threads value ${threads}`);
+      engine.postMessage("setoption name Hash value 64");
       engine.postMessage("ucinewgame");
       engine.postMessage("position startpos");
       engine.postMessage("isready");
@@ -809,6 +816,11 @@ function handleAnalysisMessage(message) {
     if (line.startsWith("uciok")) {
       analysisEngine.postMessage("setoption name VariantPath value /variants.ini");
       analysisEngine.postMessage(`setoption name UCI_Variant value ${currentVariant.id}`);
+      analysisEngine.postMessage("setoption name UCI_LimitStrength value false");
+      analysisEngine.postMessage("setoption name Skill Level value 20");
+      analysisEngine.postMessage("setoption name MultiPV value 1");
+      analysisEngine.postMessage("setoption name Threads value 1");
+      analysisEngine.postMessage("setoption name Hash value 32");
       analysisEngine.postMessage("ucinewgame");
       analysisEngine.postMessage("position startpos");
       analysisEngine.postMessage("isready");
