@@ -47,6 +47,7 @@ const handicapLinkEl = document.getElementById("handicap-link");
 const handicapCopyEl = document.getElementById("handicap-copy");
 const showAllMovesEl = document.getElementById("show-all-moves");
 const showTurnArrowsEl = document.getElementById("show-turn-arrows");
+const selfPlayModeEl = document.getElementById("self-play-mode");
 const timeModeEl = document.getElementById("time-mode");
 const timeSecondsEl = document.getElementById("time-seconds");
 const timerBarEl = document.getElementById("timer-bar");
@@ -191,6 +192,7 @@ let removedPieces = new Map();
 let moveHistory = [];
 let showAllMoves = false;
 let showTurnArrows = false;
+let selfPlayEnabled = false;
 let timeModeEnabled = false;
 let timeSeconds = 10;
 let timerRemaining = 0;
@@ -1004,14 +1006,19 @@ function attemptMove(from, to) {
   let moveStr = null;
   const move = findMove(from, to);
   if (!move) {
-    const fallback = findClosestLegalMove(from, to);
-    if (!fallback) {
-      statusEl.textContent = "Illegal move. Try again.";
-      selectedSquare = null;
-      clearHighlights();
-      return;
+    // Fallback when engine hasn't returned legal moves yet.
+    if (!legalMoves.length) {
+      moveStr = `${from}${to}`;
+    } else {
+      const fallback = findClosestLegalMove(from, to);
+      if (!fallback) {
+        statusEl.textContent = "Illegal move. Try again.";
+        selectedSquare = null;
+        clearHighlights();
+        return;
+      }
+      moveStr = `${from}${fallback.to}`;
     }
-    moveStr = `${from}${fallback.to}`;
   } else {
     moveStr = `${from}${to}`;
   }
@@ -2082,6 +2089,10 @@ function updateCheckState() {
     return;
   }
   hideTie();
+
+  if (selfPlayEnabled && gameModeEl.value === "pve" && !engineBusy) {
+    requestEngineMove();
+  }
 }
 
 function findKingSquare(kingChar) {
@@ -2192,6 +2203,14 @@ function init() {
     showTurnArrowsEl.addEventListener("change", () => {
       showTurnArrows = showTurnArrowsEl.checked;
       renderMoveArrows();
+    });
+  }
+  if (selfPlayModeEl) {
+    selfPlayModeEl.addEventListener("change", () => {
+      selfPlayEnabled = selfPlayModeEl.checked;
+      if (selfPlayEnabled && gameModeEl.value === "pve") {
+        requestEngineMove();
+      }
     });
   }
   if (timeModeEl) {
