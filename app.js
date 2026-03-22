@@ -545,6 +545,7 @@ function buildBoard() {
       square.className = (file + rank) % 2 === 0 ? "white-1e1d7 square" : "black-3c85d square";
       square.dataset.square = squareId;
       square.addEventListener("pointerdown", handlePointerDown);
+      square.addEventListener("click", handleSquareClick);
       boardEl.appendChild(square);
     }
   }
@@ -851,6 +852,30 @@ function requestEngineMove() {
   engineBusy = true;
   engine.postMessage(`position fen ${currentFen}`);
   engine.postMessage(`go depth ${searchDepth}`);
+}
+
+function handleSquareClick(event) {
+  if (dragState?.moved) return;
+  if (userModalOpen) return;
+  const square = event.currentTarget.dataset.square;
+  if (!square) return;
+
+  if (!selectedSquare) {
+    const piece = boardMap.get(square);
+    if (!piece) return;
+    if (gameModeEl.value === "pvp" && piece.color !== mySide) return;
+    selectedSquare = square;
+    highlightMoves(square);
+    return;
+  }
+
+  if (selectedSquare === square) {
+    selectedSquare = null;
+    clearHighlights();
+    return;
+  }
+
+  attemptMove(selectedSquare, square);
 }
 
 function handlePointerDown(event) {
