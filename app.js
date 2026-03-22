@@ -2267,11 +2267,17 @@ function getSquareFromPoint(x, y) {
 }
 
 function syncSelfPlayTick() {
-  const enabled = !!selfPlayModeEl?.checked;
+  window.__selfTickCount = (window.__selfTickCount || 0) + 1;
+  const enabled = !!document.getElementById('self-play-mode')?.checked;
   selfPlayEnabled = enabled;
   if (!enabled) return;
-  if (gameModeEl.value !== 'pve') return;
+  if (document.getElementById('game-mode')?.value !== 'pve') return;
   if (engineBusy) return;
+  const side = getSideToMove();
+  window.__selfSide = side || null;
+  window.__boardMapSize = boardMap.size;
+  const count = side ? getPseudoLegalMovesForSide(side).length : 0;
+  window.__selfCandidates = count;
   requestEngineMove();
 }
 
