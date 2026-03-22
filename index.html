@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <title>Chess AI</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>♟</text></svg>">
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.css"
+      referrerpolicy="no-referrer"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <!-- Game Over Modal -->
+    <div id="game-over-modal" class="modal hidden">
+      <div class="modal-backdrop"></div>
+      <div class="modal-content">
+        <div id="modal-icon" class="modal-icon">♔</div>
+        <h2 id="modal-title">Game Over</h2>
+        <p id="modal-message">Checkmate!</p>
+        <div class="modal-actions">
+          <button id="modal-new-game" class="btn btn-primary">New Game</button>
+          <button id="modal-close" class="btn btn-ghost">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <main class="app">
+      <!-- Top Bar -->
+      <header class="top-bar">
+        <div class="logo">
+          <span class="logo-icon">♟</span>
+          <span class="logo-text">Chess AI</span>
+        </div>
+        <div class="top-actions">
+          <button id="flip-board" class="btn btn-icon" title="Flip Board">🔄</button>
+          <button id="undo-move" class="btn btn-icon" title="Undo">↩️</button>
+          <button id="reset-game" class="btn btn-icon" title="Reset">🔁</button>
+          <button id="start-game" class="btn btn-primary">New Game</button>
+        </div>
+      </header>
+
+      <!-- Board Area -->
+      <section class="board-area">
+        <!-- Opponent Info -->
+        <div class="player-bar opponent">
+          <div class="player-avatar">🤖</div>
+          <div class="player-info">
+            <span class="player-name" id="opponent-name">Stockfish (Depth 20)</span>
+            <span class="player-rating" id="opponent-rating">~2300 Elo</span>
+          </div>
+          <div class="captured-pieces" id="opponent-captured"></div>
+        </div>
+
+        <!-- Eval Bar + Board -->
+        <div class="board-with-eval">
+          <div class="eval-bar-container">
+            <div class="eval-bar">
+              <div class="eval-fill" id="eval-fill"></div>
+            </div>
+          </div>
+          <div id="board" class="board"></div>
+        </div>
+
+        <!-- Player Info -->
+        <div class="player-bar player">
+          <div class="player-avatar">👤</div>
+          <div class="player-info">
+            <span class="player-name">You</span>
+            <span class="player-rating" id="player-elo">Play to estimate</span>
+          </div>
+          <div class="captured-pieces" id="player-captured"></div>
+        </div>
+      </section>
+
+      <!-- Side Panel -->
+      <aside class="side-panel">
+        <!-- Status -->
+        <div class="panel-card status-card">
+          <div class="status-indicator" id="status-dot"></div>
+          <span id="status">Ready — start a new game!</span>
+        </div>
+
+        <!-- Settings -->
+        <div class="panel-card">
+          <h3>⚙️ Settings</h3>
+          <label>
+            <span>Game Mode</span>
+            <select id="game-mode">
+              <option value="pve" selected>vs Engine</option>
+              <option value="pvp">vs Human</option>
+            </select>
+          </label>
+          <label>
+            <span>Play as</span>
+            <select id="player-color">
+              <option value="white" selected>White</option>
+              <option value="black">Black</option>
+            </select>
+          </label>
+          <label>
+            <span>Difficulty</span>
+            <div class="difficulty-slider">
+              <input id="difficulty-range" type="range" min="1" max="5" value="3" step="1" />
+              <div class="difficulty-labels">
+                <span>Easy</span>
+                <span id="difficulty-label">Medium</span>
+                <span>Max</span>
+              </div>
+            </div>
+          </label>
+        </div>
+
+        <!-- Evaluation -->
+        <div class="panel-card">
+          <h3>📊 Evaluation</h3>
+          <div class="eval-display">
+            <div class="eval-score" id="eval-score">0.00</div>
+            <div class="eval-detail muted" id="eval-detail">Engine idle</div>
+          </div>
+        </div>
+
+        <!-- Move Quality -->
+        <div class="panel-card">
+          <h3>🎯 Move Quality</h3>
+          <div class="quality-bar">
+            <div id="quality-fill"></div>
+          </div>
+          <div class="quality-meta">
+            <span id="quality-text">Last move: --</span>
+            <span id="player-level">Estimated: --</span>
+          </div>
+        </div>
+
+        <!-- Move History -->
+        <div class="panel-card">
+          <h3>📜 Move History</h3>
+          <div class="move-history" id="move-history">
+            <div class="move-history-empty">No moves yet</div>
+          </div>
+        </div>
+
+        <!-- Handicap -->
+        <div class="panel-card">
+          <h3>🎮 Handicap</h3>
+          <div class="handicap-offer hidden" id="handicap-offer">
+            <div class="handicap-row">
+              Suggested: <strong id="handicap-suggestion">--</strong>
+            </div>
+            <div class="handicap-actions">
+              <button id="start-suggested" class="btn btn-sm btn-primary">Use Suggestion</button>
+              <button id="edit-handicap" class="btn btn-sm">Edit</button>
+              <button id="start-custom" class="btn btn-sm btn-primary hidden">Start Custom</button>
+              <button id="cancel-handicap" class="btn btn-sm btn-ghost">Cancel</button>
+            </div>
+            <p class="muted" id="handicap-help">AI at max depth.</p>
+          </div>
+          <div id="remove-controls" class="hidden">
+            <p class="muted">Tap a square to toggle removal.</p>
+            <label>
+              <span>Remove Mode</span>
+              <select id="remove-mode">
+                <option value="off" selected>Off</option>
+                <option value="on">Remove Both Colors</option>
+              </select>
+            </label>
+          </div>
+        </div>
+      </aside>
+    </main>
+
+    <script src="https://unpkg.com/chess.js@0.10.2/chess.min.js" referrerpolicy="no-referrer"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.4/jquery.min.js" referrerpolicy="no-referrer"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js" referrerpolicy="no-referrer"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
