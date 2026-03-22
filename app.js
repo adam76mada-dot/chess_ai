@@ -639,13 +639,7 @@ async function ensureStockfishScript() {
       document.head.appendChild(script);
     });
 
-  try {
-    await loadScript("./fairy-stockfish.js");
-  } catch (error) {
-    console.warn("Fairy engine script failed, falling back to stockfish.js", error);
-    await loadScript("./stockfish.js");
-  }
-
+  await loadScript("./fairy-stockfish.js");
   engineScriptLoaded = true;
 }
 
@@ -712,13 +706,7 @@ function handleEngineMessage(message) {
     if (line.startsWith("uciok")) {
       engine.postMessage("setoption name VariantPath value /variants.ini");
       engine.postMessage(`setoption name UCI_Variant value ${currentVariant.id}`);
-      // Max strength profile (depth slider still controls search depth)
-      engine.postMessage("setoption name UCI_LimitStrength value false");
       engine.postMessage("setoption name Skill Level value 20");
-      engine.postMessage("setoption name MultiPV value 1");
-      const threads = Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 2) - 1));
-      engine.postMessage(`setoption name Threads value ${threads}`);
-      engine.postMessage("setoption name Hash value 64");
       engine.postMessage("ucinewgame");
       engine.postMessage("position startpos");
       engine.postMessage("isready");
@@ -816,11 +804,7 @@ function handleAnalysisMessage(message) {
     if (line.startsWith("uciok")) {
       analysisEngine.postMessage("setoption name VariantPath value /variants.ini");
       analysisEngine.postMessage(`setoption name UCI_Variant value ${currentVariant.id}`);
-      analysisEngine.postMessage("setoption name UCI_LimitStrength value false");
       analysisEngine.postMessage("setoption name Skill Level value 20");
-      analysisEngine.postMessage("setoption name MultiPV value 1");
-      analysisEngine.postMessage("setoption name Threads value 1");
-      analysisEngine.postMessage("setoption name Hash value 32");
       analysisEngine.postMessage("ucinewgame");
       analysisEngine.postMessage("position startpos");
       analysisEngine.postMessage("isready");
@@ -855,70 +839,22 @@ function handleAnalysisMessage(message) {
 }
 
 function applyMove(move) {
-  if (!currentFen) return;
-  const beforeFen = currentFen;
+  if (!currentFen || !engine || !engineReady) {
+    statusEl.textContent = "Engine not ready.";
+    return;
+  }
   const to = move.slice(2, 4);
   const isCapture = boardMap.has(to);
   playChessSound(isCapture ? "capture" : "move");
   moveHistory.push({ fen: currentFen, removed: cloneRemovedPieces(), custom: cloneCustomPieces() });
-
-  if (engineReady && engine) {
-    engine.postMessage(`position fen ${currentFen} moves ${move}`);
-    requestDump();
-
-    // Fallback: if engine does not respond fast enough, apply move locally.
-    setTimeout(() => {
-      if (currentFen === beforeFen) {
-        applyMoveFallbackLocal(move);
-      }
-    }, 500);
-  } else {
-    applyMoveFallbackLocal(move);
-  }
-}
-
-function applyMoveFallbackLocal(move) {
-  if (!currentFen) return;
-  const from = move.slice(0, 2);
-  const to = move.slice(2, 4);
-  const promo = move.length > 4 ? move.slice(4, 5) : null;
-  const piece = boardMap.get(from);
-  if (!piece) return;
-
-  const pieceChar = piece.color === 'w' ? piece.type.toUpperCase() : piece.type;
-  let nextPieceChar = pieceChar;
-  if (promo) {
-    nextPieceChar = piece.color === 'w' ? promo.toUpperCase() : promo.toLowerCase();
-  }
-
-  // Clear from, place to, flip side-to-move.
-  const parts = currentFen.split(' ');
-  currentFen = updateFenAtSquare(currentFen, from, null);
-  currentFen = updateFenAtSquare(currentFen, to, nextPieceChar);
-  const nextSide = parts[1] === 'w' ? 'b' : 'w';
-  const castle = parts[2] || '-';
-  const ep = '-';
-  const half = Number.parseInt(parts[4] || '0', 10) + 1;
-  const full = Number.parseInt(parts[5] || '1', 10) + (nextSide === 'w' ? 1 : 0);
-  currentFen = `${currentFen.split(' ')[0]} ${nextSide} ${castle} ${ep} ${half} ${full}`;
-  window.__debugFen = currentFen;
-
-  renderBoardFromFen();
-  statusEl.textContent = 'Move applied (local fallback).';
-  requestLegalMoves();
+  engine.postMessage(`position fen ${currentFen} moves ${move}`);
+  requestDump();
 }
 
 function requestEngineMove() {
   if (gameModeEl.value === "pvp") return;
-  if (!currentFen) return;
+  if (!currentFen || !engineReady || !engine) return;
   pendingEngineMove = false;
-
-  // Engine unavailable: fallback to local pseudo-AI.
-  if (!engine || !engineReady) {
-    requestFallbackAIMove();
-    return;
-  }
-
   if (engineBusy) return;
   engineBusy = true;
   engine.postMessage(`position fen ${currentFen}`);
@@ -927,20 +863,10 @@ function requestEngineMove() {
   if (engineMoveTimeout) clearTimeout(engineMoveTimeout);
   engineMoveTimeout = setTimeout(() => {
     if (!engineBusy) return;
+    engine.postMessage("stop");
     engineBusy = false;
-    requestFallbackAIMove();
-  }, 2500);
-}
-
-function requestFallbackAIMove() {
-  const side = getSideToMove();
-  if (!side) return;
-  const candidates = getPseudoLegalMovesForSide(side);
-  if (!candidates.length) return;
-  const pick = candidates[Math.floor(Math.random() * candidates.length)];
-  setTimeout(() => {
-    applyMove(pick);
-  }, 220);
+    statusEl.textContent = "Engine timed out. Try lower depth.";
+  }, 6000);
 }
 
 function handleSquareClick(event) {
@@ -1128,19 +1054,14 @@ function attemptMove(from, to) {
   let moveStr = null;
   const move = findMove(from, to);
   if (!move) {
-    // Fallback when engine hasn't returned legal moves yet.
-    if (!legalMoves.length) {
-      moveStr = `${from}${to}`;
-    } else {
-      const fallback = findClosestLegalMove(from, to);
-      if (!fallback) {
-        statusEl.textContent = "Illegal move. Try again.";
-        selectedSquare = null;
-        clearHighlights();
-        return;
-      }
-      moveStr = `${from}${fallback.to}`;
+    const fallback = findClosestLegalMove(from, to);
+    if (!fallback) {
+      statusEl.textContent = legalMoves.length ? "Illegal move. Try again." : "Engine still loading legal moves...";
+      selectedSquare = null;
+      clearHighlights();
+      return;
     }
+    moveStr = `${from}${fallback.to}`;
   } else {
     moveStr = `${from}${to}`;
   }
@@ -1285,14 +1206,13 @@ function getPseudoLegalMovesForSide(side) {
 
 function highlightMoves(square) {
   clearHighlights();
-  const sourceMoves = legalMoves.length
-    ? legalMoves.filter((move) => move.startsWith(square))
-    : getPseudoLegalMovesForSide(getSideToMove() || mySide).filter((move) => move.startsWith(square));
-  sourceMoves.forEach((move) => {
-    const target = move.slice(2, 4);
-    const squareEl = boardEl.querySelector(`[data-square='${target}']`);
-    if (squareEl) squareEl.classList.add("square-highlight");
-  });
+  legalMoves
+    .filter((move) => move.startsWith(square))
+    .forEach((move) => {
+      const target = move.slice(2, 4);
+      const squareEl = boardEl.querySelector(`[data-square='${target}']`);
+      if (squareEl) squareEl.classList.add("square-highlight");
+    });
   renderMoveArrows();
 }
 
