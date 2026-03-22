@@ -838,12 +838,55 @@ function handleAnalysisMessage(message) {
 
 function applyMove(move) {
   if (!currentFen) return;
+  const beforeFen = currentFen;
   const to = move.slice(2, 4);
   const isCapture = boardMap.has(to);
   playChessSound(isCapture ? "capture" : "move");
   moveHistory.push({ fen: currentFen, removed: cloneRemovedPieces(), custom: cloneCustomPieces() });
-  engine.postMessage(`position fen ${currentFen} moves ${move}`);
-  requestDump();
+
+  if (engineReady && engine) {
+    engine.postMessage(`position fen ${currentFen} moves ${move}`);
+    requestDump();
+
+    // Fallback: if engine does not respond fast enough, apply move locally.
+    setTimeout(() => {
+      if (currentFen === beforeFen) {
+        applyMoveFallbackLocal(move);
+      }
+    }, 500);
+  } else {
+    applyMoveFallbackLocal(move);
+  }
+}
+
+function applyMoveFallbackLocal(move) {
+  if (!currentFen) return;
+  const from = move.slice(0, 2);
+  const to = move.slice(2, 4);
+  const promo = move.length > 4 ? move.slice(4, 5) : null;
+  const piece = boardMap.get(from);
+  if (!piece) return;
+
+  const pieceChar = piece.color === 'w' ? piece.type.toUpperCase() : piece.type;
+  let nextPieceChar = pieceChar;
+  if (promo) {
+    nextPieceChar = piece.color === 'w' ? promo.toUpperCase() : promo.toLowerCase();
+  }
+
+  // Clear from, place to, flip side-to-move.
+  const parts = currentFen.split(' ');
+  currentFen = updateFenAtSquare(currentFen, from, null);
+  currentFen = updateFenAtSquare(currentFen, to, nextPieceChar);
+  const nextSide = parts[1] === 'w' ? 'b' : 'w';
+  const castle = parts[2] || '-';
+  const ep = '-';
+  const half = Number.parseInt(parts[4] || '0', 10) + 1;
+  const full = Number.parseInt(parts[5] || '1', 10) + (nextSide === 'w' ? 1 : 0);
+  currentFen = `${currentFen.split(' ')[0]} ${nextSide} ${castle} ${ep} ${half} ${full}`;
+
+  renderBoardFromFen();
+  statusEl.textContent = 'Move applied (local fallback).';
+  requestLegalMoves();
 }
 
 function requestEngineMove() {
