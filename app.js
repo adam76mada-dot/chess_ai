@@ -168,6 +168,7 @@ const BEST_ARROW_COLORS = {
 let engine = null;
 let engineReady = false;
 let engineBusy = false;
+let engineMoveTimeout = null;
 let analysisEngine = null;
 let analysisReady = false;
 let analysisBusy = false;
@@ -787,6 +788,10 @@ function handleEngineMessage(message) {
     }
     if (line.startsWith("bestmove")) {
       engineBusy = false;
+      if (engineMoveTimeout) {
+        clearTimeout(engineMoveTimeout);
+        engineMoveTimeout = null;
+      }
       const bestMove = line.split(" ")[1];
       if (bestMove && bestMove !== "(none)") {
         applyMove(bestMove);
@@ -903,6 +908,13 @@ function requestEngineMove() {
   engineBusy = true;
   engine.postMessage(`position fen ${currentFen}`);
   engine.postMessage(`go depth ${searchDepth}`);
+
+  if (engineMoveTimeout) clearTimeout(engineMoveTimeout);
+  engineMoveTimeout = setTimeout(() => {
+    if (!engineBusy) return;
+    engineBusy = false;
+    requestFallbackAIMove();
+  }, 900);
 }
 
 function requestFallbackAIMove() {
@@ -2267,17 +2279,11 @@ function getSquareFromPoint(x, y) {
 }
 
 function syncSelfPlayTick() {
-  window.__selfTickCount = (window.__selfTickCount || 0) + 1;
   const enabled = !!document.getElementById('self-play-mode')?.checked;
   selfPlayEnabled = enabled;
   if (!enabled) return;
   if (document.getElementById('game-mode')?.value !== 'pve') return;
   if (engineBusy) return;
-  const side = getSideToMove();
-  window.__selfSide = side || null;
-  window.__boardMapSize = boardMap.size;
-  const count = side ? getPseudoLegalMovesForSide(side).length : 0;
-  window.__selfCandidates = count;
   requestEngineMove();
 }
 
