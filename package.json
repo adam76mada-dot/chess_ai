@@ -1,0 +1,16 @@
+{
+  "name": "chess-ai",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "fairy-stockfish-nnue.wasm": "^1.1.11",
+    "nanoid": "^5.0.7",
+    "stockfish.wasm": "^0.10.0",
+    "ws": "^8.17.0"
+  }
+}
