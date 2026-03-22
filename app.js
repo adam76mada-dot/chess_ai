@@ -891,10 +891,29 @@ function applyMoveFallbackLocal(move) {
 
 function requestEngineMove() {
   if (gameModeEl.value === "pvp") return;
-  if (!engine || engineBusy) return;
+  if (!currentFen) return;
+
+  // Engine unavailable: fallback to local pseudo-AI.
+  if (!engine || !engineReady) {
+    requestFallbackAIMove();
+    return;
+  }
+
+  if (engineBusy) return;
   engineBusy = true;
   engine.postMessage(`position fen ${currentFen}`);
   engine.postMessage(`go depth ${searchDepth}`);
+}
+
+function requestFallbackAIMove() {
+  const side = getSideToMove();
+  if (!side) return;
+  const candidates = getPseudoLegalMovesForSide(side);
+  if (!candidates.length) return;
+  const pick = candidates[Math.floor(Math.random() * candidates.length)];
+  setTimeout(() => {
+    applyMove(pick);
+  }, 220);
 }
 
 function handleSquareClick(event) {
@@ -1164,15 +1183,78 @@ function squareToCoords(square) {
   return [file, rank];
 }
 
+function inBounds(file, rank) {
+  return file >= 0 && file < currentVariant.files && rank >= 1 && rank <= currentVariant.ranks;
+}
+
+function pieceAt(file, rank) {
+  return boardMap.get(coordsToSquare(file, rank)) || null;
+}
+
+function getPseudoLegalMovesForSide(side) {
+  const moves = [];
+  boardMap.forEach((piece, from) => {
+    if (piece.color !== side) return;
+    const [f, r] = squareToCoords(from);
+    const push = (tf, tr, slider = false) => {
+      if (!inBounds(tf, tr)) return false;
+      const target = pieceAt(tf, tr);
+      if (!target) {
+        moves.push(`${from}${coordsToSquare(tf, tr)}`);
+        return slider;
+      }
+      if (target.color !== side) {
+        moves.push(`${from}${coordsToSquare(tf, tr)}`);
+      }
+      return false;
+    };
+
+    if (piece.type === 'p') {
+      const dir = side === 'w' ? 1 : -1;
+      if (!pieceAt(f, r + dir) && inBounds(f, r + dir)) moves.push(`${from}${coordsToSquare(f, r + dir)}`);
+      [[f - 1, r + dir], [f + 1, r + dir]].forEach(([cf, cr]) => {
+        if (!inBounds(cf, cr)) return;
+        const t = pieceAt(cf, cr);
+        if (t && t.color !== side) moves.push(`${from}${coordsToSquare(cf, cr)}`);
+      });
+      return;
+    }
+
+    if (piece.type === 'n') {
+      [[1,2],[2,1],[-1,2],[-2,1],[1,-2],[2,-1],[-1,-2],[-2,-1]].forEach(([df,dr])=>push(f+df,r+dr,false));
+      return;
+    }
+
+    if (piece.type === 'k') {
+      for (let df=-1; df<=1; df+=1) for (let dr=-1; dr<=1; dr+=1) if (df||dr) push(f+df,r+dr,false);
+      return;
+    }
+
+    const dirs = [];
+    if (piece.type === 'b' || piece.type === 'q') dirs.push([1,1],[1,-1],[-1,1],[-1,-1]);
+    if (piece.type === 'r' || piece.type === 'q') dirs.push([1,0],[-1,0],[0,1],[0,-1]);
+    dirs.forEach(([df,dr]) => {
+      let tf = f + df;
+      let tr = r + dr;
+      while (push(tf, tr, true)) {
+        tf += df;
+        tr += dr;
+      }
+    });
+  });
+  return moves;
+}
+
 function highlightMoves(square) {
   clearHighlights();
-  legalMoves
-    .filter((move) => move.startsWith(square))
-    .forEach((move) => {
-      const target = move.slice(2, 4);
-      const squareEl = boardEl.querySelector(`[data-square='${target}']`);
-      if (squareEl) squareEl.classList.add("square-highlight");
-    });
+  const sourceMoves = legalMoves.length
+    ? legalMoves.filter((move) => move.startsWith(square))
+    : getPseudoLegalMovesForSide(getSideToMove() || mySide).filter((move) => move.startsWith(square));
+  sourceMoves.forEach((move) => {
+    const target = move.slice(2, 4);
+    const squareEl = boardEl.querySelector(`[data-square='${target}']`);
+    if (squareEl) squareEl.classList.add("square-highlight");
+  });
   renderMoveArrows();
 }
 
