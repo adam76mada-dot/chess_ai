@@ -214,7 +214,7 @@ let pvpSide = null;
 let pvpPlayers = {};
 let pvpClientId = null;
 let pendingPieceSquare = null;
-let initialModalShown = false;
+let initialModalShown = true;
 let pendingStartModal = false;
 let userModalOpen = false;
 let eloDelta = null;
@@ -2159,7 +2159,7 @@ function init() {
   renderUsers(users);
   const confirmed = localStorage.getItem(STORAGE_KEYS.userConfirmed) === "true";
   if (!confirmed) {
-    showUserModal();
+    localStorage.setItem(STORAGE_KEYS.userConfirmed, "true");
   }
   loadVariant();
   void initEngine().catch((error) => {
